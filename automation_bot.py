@@ -316,19 +316,9 @@ def _is_session_valid(page: Page) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _select_week(page: Page, week_text: str) -> bool:
-    """Attempts to find and select the week from the calendar."""
-    log.info(f"📅 Attempting to select week: {week_text}")
-    import datetime
+    """Opens the calendar and pauses for the user to manually select the week."""
+    log.info(f"📅 Opening calendar for manual week selection...")
     try:
-        start_str = week_text.split(" to ")[0].strip() # "21-Jun-2026"
-        end_str = week_text.split(" to ")[1].strip()   # "27-Jun-2026"
-        
-        target_start = datetime.datetime.strptime(start_str, "%d-%b-%Y")
-        target_end = datetime.datetime.strptime(end_str, "%d-%b-%Y")
-        
-        # Expected format in the input field: "Jun 21 - Jun 27, 2026"
-        expected_val = f"{target_start.strftime('%b %d')} - {target_end.strftime('%b %d, %Y')}"
-        
         # 1. Find the date input field
         date_input = None
         for inp in page.locator("input[type='text'], input:not([type])").all():
@@ -338,80 +328,36 @@ def _select_week(page: Page, week_text: str) -> bool:
                 break
                 
         if not date_input:
-            # Fallback: find input near the "Add New Entry" button
             add_btn = page.locator("text='Add New Entry'").first
             if add_btn.count() > 0:
                 date_input = add_btn.locator("xpath=..").locator("input").first
 
         if date_input and date_input.count() > 0:
-            if date_input.input_value() == expected_val:
-                log.info(f"    ✔ Week is already correctly set to {expected_val}.")
-                return True
-                
-            # Click to open the calendar
+            # Click to display the whole calendar
             date_input.click(timeout=3000)
-            page.wait_for_timeout(1000)
+            page.wait_for_timeout(500)
+            log.info("    ✔ Calendar displayed on portal.")
             
-            target_day = str(target_start.day)
-            target_month = target_start.strftime("%B") # e.g. "June"
-            
-            # Find cells with the exact day text using Playwright's exact text pseudo-selector
-            day_cells = page.locator(f"td:text-is('{target_day}'), .day:text-is('{target_day}')").all()
-            
-            clicked = False
-            for cell in day_cells:
-                if not cell.is_visible():
-                    continue
-                    
-                class_attr = (cell.get_attribute("class") or "").lower()
-                # Skip days from previous/next months which are usually grayed out
-                if any(x in class_attr for x in ["old", "new", "muted", "disabled", "other-month", "out-of-range"]):
-                    continue
-                    
-                # A calendar cell is usually small. A full timesheet row/cell might be large.
-                box = cell.bounding_box()
-                if box and box["width"] > 100:
-                    continue # Too wide to be a calendar day cell
-                    
-                cell.scroll_into_view_if_needed()
-                cell.click(timeout=3000)
-                clicked = True
-                page.wait_for_timeout(1500) # Wait for AJAX load of the new week
-                break
-                
-            if clicked:
-                log.info(f"    ✔ Clicked day {target_day} on the calendar.")
-                return True
-            else:
-                log.warning(f"    ⚠️ Could not find a clickable cell for day {target_day}.")
-                
-                # Interactive fallback!
-                print(f"[BOT_QUESTION] field=Select Week | wanted={expected_val} | options=I have manually selected it on the portal", flush=True)
-                sys.stdout.flush()
-                log.info(f"    ⏸️  Waiting for your input for 'Select Week'…")
-                try:
-                    input().strip()
-                except EOFError:
-                    pass
-                return False
-
-    except Exception as e:
-        log.warning(f"    ⚠️ Error in auto-selecting week: {e}")
-        try:
-            page.keyboard.press("Escape")
-        except:
-            pass
-        
-        # Interactive fallback on error
-        print(f"[BOT_QUESTION] field=Select Week | wanted={week_text} | options=I have manually selected it on the portal", flush=True)
+        # Immediately pause and let the user select the week
+        print(f"[BOT_QUESTION] field=Select Week | wanted={week_text} (Manual Selection Required) | options=I have clicked my week on the portal", flush=True)
         sys.stdout.flush()
-        log.info(f"    ⏸️  Waiting for your input for 'Select Week'…")
+        log.info(f"    ⏸️  Waiting for you to select the week on the calendar…")
         try:
             input().strip()
         except EOFError:
             pass
+            
+        # Give the portal a moment to reload the timesheet grid after they click
+        page.wait_for_timeout(2000)
+        return True
 
-    return False
+    except Exception as e:
+        log.warning(f"    ⚠️ Error opening calendar: {e}")
+        try:
+            page.keyboard.press("Escape")
+        except:
+            pass
+        return False
 
 
 def _select2_dropdown(page: Page, label_text: str, search_text: str, field_name: str = "Field") -> bool:
