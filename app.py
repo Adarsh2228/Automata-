@@ -416,11 +416,13 @@ with st.sidebar:
     import datetime
     today = datetime.date.today()
     week_labels = []
+    days_to_sunday = (today.weekday() + 1) % 7
+    last_sunday = today - datetime.timedelta(days=days_to_sunday)
+    
     for delta in range(-4, 22):
-        monday = today - datetime.timedelta(days=today.weekday()) + datetime.timedelta(weeks=delta)
-        friday = monday + datetime.timedelta(days=4)
-        wn = monday.isocalendar()[1]
-        week_labels.append(f"Week {wn} ({monday.strftime('%b %d')} – {friday.strftime('%b %d, %Y')})")
+        sunday = last_sunday + datetime.timedelta(weeks=delta)
+        saturday = sunday + datetime.timedelta(days=6)
+        week_labels.append(f"{sunday.strftime('%d-%b-%Y')} to {saturday.strftime('%d-%b-%Y')}")
     selected_week = st.selectbox("📅 Select Week", week_labels, index=4)
 
     task_categories = [

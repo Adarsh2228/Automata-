@@ -322,8 +322,8 @@ def _select_week(page: Page, week_text: str) -> bool:
             
             search_input = page.locator(".select2-search__field").last
             search_input.fill("")
-            # Type just the first few characters (e.g. "Week 26") to broaden the search
-            short_week = week_text.split("(")[0].strip() if "(" in week_text else week_text
+            # Type just the first part (e.g. "21-Jun-2026") to broaden the search
+            short_week = week_text.split(" to ")[0].strip() if " to " in week_text else week_text
             search_input.type(short_week, delay=50)
             page.wait_for_timeout(1000)
             
