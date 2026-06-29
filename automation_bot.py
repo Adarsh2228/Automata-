@@ -40,6 +40,9 @@ import argparse
 import json
 import logging
 import os
+# Force Playwright to use the local project directory for browsers on Render
+os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
+
 import re
 import sys
 import time
@@ -192,8 +195,6 @@ def _launch_context(playwright, use_session: bool) -> tuple:
 
     # Automatically run headless on Render (servers have no display for headed browsers)
     is_server = os.getenv("RENDER") is not None
-    if is_server:
-        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
     
     try:
         browser = playwright.chromium.launch(
