@@ -142,8 +142,8 @@ def run_bot_subprocess(tasks: list, week: str, category: str,
     env_copy["PORTAL_USERNAME"] = st.session_state.portal_username
     env_copy["PORTAL_PASSWORD"] = st.session_state.portal_password
     env_copy["PORTAL_URL"]      = "https://sangraha.ltfinance.com"
-    env_copy["PLAYWRIGHT_BROWSERS_PATH"] = str(Path(__file__).parent / ".ms-playwright")
-
+    if os.getenv("RENDER") is not None:
+        env_copy["PLAYWRIGHT_BROWSERS_PATH"] = str(Path(__file__).parent / ".ms-playwright")
 
 
     cmd = [
