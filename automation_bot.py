@@ -355,9 +355,8 @@ def _select_week(page: Page, week_text: str) -> bool:
             target_day = str(target_start.day)
             target_month = target_start.strftime("%B") # e.g. "June"
             
-            # Find cells with the exact day text, specifically targeting calendar classes if possible
-            # Bootstrap/common datepickers use 'td.day'. We also use exact regex to avoid matching "Sun 21" or totals.
-            day_cells = page.locator("td, .day").filter(has_text=re.compile(f"^{target_day}$")).all()
+            # Find cells with the exact day text using Playwright's exact text pseudo-selector
+            day_cells = page.locator(f"td:text-is('{target_day}'), .day:text-is('{target_day}')").all()
             
             clicked = False
             for cell in day_cells:
@@ -385,13 +384,16 @@ def _select_week(page: Page, week_text: str) -> bool:
                 return True
             else:
                 log.warning(f"    ⚠️ Could not find a clickable cell for day {target_day}.")
-                # Force inject via JS if click fails
-                log.info(f"    Force-filling date input with: {expected_val}")
-                date_input.evaluate(f"el => {{ el.removeAttribute('readonly'); el.value = '{expected_val}'; el.dispatchEvent(new Event('input', {{ bubbles: true }})); el.dispatchEvent(new Event('change', {{ bubbles: true }})); }}")
-                page.wait_for_timeout(1000)
-                if date_input.input_value() == expected_val:
-                    log.info("    ✔ Week forcefully set via value injection.")
-                    return True
+                
+                # Interactive fallback!
+                print(f"[BOT_QUESTION] field=Select Week | wanted={expected_val} | options=I have manually selected it on the portal", flush=True)
+                sys.stdout.flush()
+                log.info(f"    ⏸️  Waiting for your input for 'Select Week'…")
+                try:
+                    input().strip()
+                except EOFError:
+                    pass
+                return False
 
     except Exception as e:
         log.warning(f"    ⚠️ Error in auto-selecting week: {e}")
@@ -399,6 +401,16 @@ def _select_week(page: Page, week_text: str) -> bool:
             page.keyboard.press("Escape")
         except:
             pass
+        
+        # Interactive fallback on error
+        print(f"[BOT_QUESTION] field=Select Week | wanted={week_text} | options=I have manually selected it on the portal", flush=True)
+        sys.stdout.flush()
+        log.info(f"    ⏸️  Waiting for your input for 'Select Week'…")
+        try:
+            input().strip()
+        except EOFError:
+            pass
+
     return False
 
 
