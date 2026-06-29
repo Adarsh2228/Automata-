@@ -333,20 +333,59 @@ def _select_week(page: Page, week_text: str) -> bool:
                 date_input = add_btn.locator("xpath=..").locator("input").first
 
         if date_input and date_input.count() > 0:
+            if date_input.input_value() == expected_val:
+                log.info(f"    ✔ Week is already correctly set to {expected_val}.")
+                return True
+                
             # Click to display the whole calendar
             date_input.click(timeout=3000)
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(1000)
             log.info("    ✔ Calendar displayed on portal.")
             
-        # Pause using a simple timeout to avoid Streamlit UI reset bugs
-        log.info(f"    ⏸️  ACTION REQUIRED: Please click your week on the portal calendar NOW.")
-        log.info(f"    ⏳ Waiting 15 seconds for you to select it...")
-        
-        # We wait 15 seconds to give the user plenty of time to click their week.
-        page.wait_for_timeout(15_000)
-        
-        log.info("    ▶️  Resuming automation...")
-        return True
+            target_day = str(target_start.day)
+            
+            # Find cells with the exact day text using Playwright's exact text pseudo-selector
+            day_cells = page.locator("td, .day").get_by_text(target_day, exact=True).all()
+            
+            clicked = False
+            for cell in day_cells:
+                if not cell.is_visible():
+                    continue
+                    
+                class_attr = (cell.get_attribute("class") or "").lower()
+                # Skip days from previous/next months which are usually grayed out
+                if any(x in class_attr for x in ["old", "new", "muted", "disabled", "other-month", "out-of-range"]):
+                    continue
+                    
+                # A calendar cell is usually small. A full timesheet row/cell might be large.
+                box = cell.bounding_box()
+                if box and box["width"] > 100:
+                    continue # Too wide to be a calendar day cell
+                    
+                cell.scroll_into_view_if_needed()
+                cell.click(timeout=3000)
+                clicked = True
+                page.wait_for_timeout(2000) # Wait for AJAX load of the new week
+                break
+                
+            if clicked:
+                if date_input.input_value() == expected_val:
+                    log.info(f"    ✔ Successfully selected week: {expected_val}")
+                    return True
+                else:
+                    log.warning(f"    ⚠️ Clicked calendar but input didn't change to {expected_val}")
+            
+            # Fallback: Javascript injection if clicking fails or misses
+            log.info(f"    Force-filling date input via Javascript...")
+            date_input.evaluate(f"el => {{ el.removeAttribute('readonly'); el.value = '{expected_val}'; el.dispatchEvent(new Event('input', {{ bubbles: true }})); el.dispatchEvent(new Event('change', {{ bubbles: true }})); }}")
+            page.wait_for_timeout(1500)
+            
+            if date_input.input_value() == expected_val:
+                log.info("    ✔ Week forcefully set via value injection.")
+                return True
+                
+            log.warning("    ❌ Failed to select the correct week automatically.")
+            return False
 
     except Exception as e:
         log.warning(f"    ⚠️ Error opening calendar: {e}")
