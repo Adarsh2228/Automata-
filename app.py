@@ -49,6 +49,10 @@ for k, v in DEFAULTS.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
+if st.session_state.get("show_saved_toast"):
+    st.toast("Credentials saved successfully!", icon="✅")
+    st.session_state.show_saved_toast = False
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def session_file_exists() -> bool:
@@ -356,8 +360,7 @@ def credentials_dialog():
                 st.session_state.creds_configured = True
                 # Write to .env so they survive restarts
                 save_creds_to_env(username, password, jira_server, jira_email, jira_token)
-                st.success("✅ Credentials saved!")
-                time.sleep(0.8)
+                st.session_state.show_saved_toast = True
                 st.rerun()
     with cancel_col:
         if st.button("Cancel", use_container_width=True):
