@@ -193,11 +193,25 @@ def _launch_context(playwright, use_session: bool) -> tuple:
     # Automatically run headless on Render (servers have no display for headed browsers)
     is_server = os.getenv("RENDER") is not None
     
-    browser = playwright.chromium.launch(
-        headless=is_server,     # True on Render, False locally so user can see it
-        args=browser_args,
-        timeout=30_000,
-    )
+    try:
+        browser = playwright.chromium.launch(
+            headless=is_server,     # True on Render, False locally so user can see it
+            args=browser_args,
+            timeout=30_000,
+        )
+    except Exception as e:
+        if "Executable doesn't exist" in str(e) and is_server:
+            log.warning("⚠️ Playwright browser missing (Render cache issue). Installing now...")
+            import subprocess
+            subprocess.run(["playwright", "install", "chromium"], check=True)
+            log.info("✅ Installation complete. Retrying launch...")
+            browser = playwright.chromium.launch(
+                headless=is_server,
+                args=browser_args,
+                timeout=30_000,
+            )
+        else:
+            raise
 
     context_kwargs = {
         "viewport":          {"width": 1280, "height": 900},
