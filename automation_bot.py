@@ -310,30 +310,77 @@ def _is_session_valid(page: Page) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _select_week(page: Page, week_text: str) -> bool:
-    """Attempts to find and select the week/period dropdown on the Timesheet page."""
+    """Attempts to find and select the week from the calendar."""
     log.info(f"📅 Attempting to select week: {week_text}")
+    import datetime
     try:
-        # Look for a Select2 container. The week selector is usually at the top of the timesheet page.
-        container = page.locator(".select2-container").first
-        if container.count() > 0:
-            container.scroll_into_view_if_needed()
-            container.click(timeout=3000)
-            page.wait_for_timeout(500)
-            
-            search_input = page.locator(".select2-search__field").last
-            search_input.fill("")
-            # Type just the first part (e.g. "21-Jun-2026") to broaden the search
-            short_week = week_text.split(" to ")[0].strip() if " to " in week_text else week_text
-            search_input.type(short_week, delay=50)
+        start_str = week_text.split(" to ")[0].strip() # "21-Jun-2026"
+        end_str = week_text.split(" to ")[1].strip()   # "27-Jun-2026"
+        
+        target_start = datetime.datetime.strptime(start_str, "%d-%b-%Y")
+        target_end = datetime.datetime.strptime(end_str, "%d-%b-%Y")
+        
+        # Expected format in the input field: "Jun 21 - Jun 27, 2026"
+        expected_val = f"{target_start.strftime('%b %d')} - {target_end.strftime('%b %d, %Y')}"
+        
+        # 1. Find the date input field
+        date_input = None
+        for inp in page.locator("input[type='text'], input:not([type])").all():
+            val = inp.input_value()
+            if val and re.search(r"[A-Z][a-z]{2} \d{1,2}", val):
+                date_input = inp
+                break
+                
+        if not date_input:
+            # Fallback: find input near the "Add New Entry" button
+            add_btn = page.locator("text='Add New Entry'").first
+            if add_btn.count() > 0:
+                date_input = add_btn.locator("xpath=..").locator("input").first
+
+        if date_input and date_input.count() > 0:
+            if date_input.input_value() == expected_val:
+                log.info(f"    ✔ Week is already correctly set to {expected_val}.")
+                return True
+                
+            # Click to open the calendar
+            date_input.click(timeout=3000)
             page.wait_for_timeout(1000)
             
-            first_result = page.locator(".select2-results__option").first
-            first_result.click(timeout=3000)
-            page.wait_for_timeout(1000)
-            log.info(f"    ✔ Week '{short_week}' selected successfully.")
-            return True
+            target_day = str(target_start.day)
+            target_month = target_start.strftime("%B") # e.g. "June"
+            
+            # Check if we need to navigate months (simple fallback: just click the day if it's there)
+            # Find cells with the exact day text
+            day_cells = page.locator(f"xpath=//td[text()='{target_day}' or .//text()='{target_day}'] | //div[text()='{target_day}' or .//text()='{target_day}']").all()
+            
+            clicked = False
+            for cell in day_cells:
+                class_attr = (cell.get_attribute("class") or "").lower()
+                # Skip days from previous/next months which are usually grayed out
+                if any(x in class_attr for x in ["old", "new", "muted", "disabled", "other-month"]):
+                    continue
+                    
+                cell.scroll_into_view_if_needed()
+                cell.click(timeout=3000)
+                clicked = True
+                page.wait_for_timeout(1000)
+                break
+                
+            if clicked:
+                log.info(f"    ✔ Clicked day {target_day} on the calendar.")
+                return True
+            else:
+                log.warning(f"    ⚠️ Could not find a clickable cell for day {target_day}.")
+                # Force inject via JS if click fails
+                log.info(f"    Force-filling date input with: {expected_val}")
+                date_input.evaluate(f"el => {{ el.removeAttribute('readonly'); el.value = '{expected_val}'; el.dispatchEvent(new Event('input', {{ bubbles: true }})); el.dispatchEvent(new Event('change', {{ bubbles: true }})); }}")
+                page.wait_for_timeout(1000)
+                if date_input.input_value() == expected_val:
+                    log.info("    ✔ Week forcefully set via value injection.")
+                    return True
+
     except Exception as e:
-        log.warning(f"    ⚠️ Could not auto-select week: {e}")
+        log.warning(f"    ⚠️ Error in auto-selecting week: {e}")
         try:
             page.keyboard.press("Escape")
         except:
