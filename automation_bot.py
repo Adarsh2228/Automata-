@@ -40,8 +40,10 @@ import argparse
 import json
 import logging
 import os
+from pathlib import Path
 # Force Playwright to use the local project directory for browsers on Render
-os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
+os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(Path(__file__).parent / ".ms-playwright")
+
 
 import re
 import sys
