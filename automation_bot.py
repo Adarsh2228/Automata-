@@ -355,21 +355,29 @@ def _select_week(page: Page, week_text: str) -> bool:
             target_day = str(target_start.day)
             target_month = target_start.strftime("%B") # e.g. "June"
             
-            # Check if we need to navigate months (simple fallback: just click the day if it's there)
-            # Find cells with the exact day text
-            day_cells = page.locator(f"xpath=//td[text()='{target_day}' or .//text()='{target_day}'] | //div[text()='{target_day}' or .//text()='{target_day}']").all()
+            # Find cells with the exact day text, specifically targeting calendar classes if possible
+            # Bootstrap/common datepickers use 'td.day'. We also use exact regex to avoid matching "Sun 21" or totals.
+            day_cells = page.locator("td, .day").filter(has_text=re.compile(f"^{target_day}$")).all()
             
             clicked = False
             for cell in day_cells:
+                if not cell.is_visible():
+                    continue
+                    
                 class_attr = (cell.get_attribute("class") or "").lower()
                 # Skip days from previous/next months which are usually grayed out
-                if any(x in class_attr for x in ["old", "new", "muted", "disabled", "other-month"]):
+                if any(x in class_attr for x in ["old", "new", "muted", "disabled", "other-month", "out-of-range"]):
                     continue
+                    
+                # A calendar cell is usually small. A full timesheet row/cell might be large.
+                box = cell.bounding_box()
+                if box and box["width"] > 100:
+                    continue # Too wide to be a calendar day cell
                     
                 cell.scroll_into_view_if_needed()
                 cell.click(timeout=3000)
                 clicked = True
-                page.wait_for_timeout(1000)
+                page.wait_for_timeout(1500) # Wait for AJAX load of the new week
                 break
                 
             if clicked:
