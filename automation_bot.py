@@ -41,8 +41,9 @@ import json
 import logging
 import os
 from pathlib import Path
-# Force Playwright to use the local project directory for browsers on Render
-os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(Path(__file__).parent / ".ms-playwright")
+# Force Playwright to use the local project directory for browsers ONLY on Render
+if os.getenv("RENDER") is not None:
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(Path(__file__).parent / ".ms-playwright")
 
 
 import re
@@ -205,18 +206,9 @@ def _launch_context(playwright, use_session: bool) -> tuple:
             timeout=30_000,
         )
     except Exception as e:
-        if "Executable doesn't exist" in str(e):
-            log.warning("⚠️ Playwright browser missing. Installing now...")
-            import subprocess
-            subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
-            log.info("✅ Installation complete. Retrying launch...")
-            browser = playwright.chromium.launch(
-                headless=is_server,
-                args=browser_args,
-                timeout=30_000,
-            )
-        else:
-            raise
+        log.error(f"❌ Playwright browser failed to launch: {e}")
+        log.error("Please ensure the browser is installed by running `playwright install chromium` during the build step.")
+        raise
 
     context_kwargs = {
         "viewport":          {"width": 1280, "height": 900},
