@@ -190,8 +190,11 @@ def _launch_context(playwright, use_session: bool) -> tuple:
         "--blink-settings=imagesEnabled=false",            # disable images at engine level
     ]
 
+    # Automatically run headless on Render (servers have no display for headed browsers)
+    is_server = os.getenv("RENDER") is not None
+    
     browser = playwright.chromium.launch(
-        headless=False,         # OPTIMISATION 3 – changed to False so user can see it
+        headless=is_server,     # True on Render, False locally so user can see it
         args=browser_args,
         timeout=30_000,
     )
