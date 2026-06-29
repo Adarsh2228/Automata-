@@ -309,6 +309,38 @@ def _is_session_valid(page: Page) -> bool:
 # Core automation – form filling
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _select_week(page: Page, week_text: str) -> bool:
+    """Attempts to find and select the week/period dropdown on the Timesheet page."""
+    log.info(f"📅 Attempting to select week: {week_text}")
+    try:
+        # Look for a Select2 container. The week selector is usually at the top of the timesheet page.
+        container = page.locator(".select2-container").first
+        if container.count() > 0:
+            container.scroll_into_view_if_needed()
+            container.click(timeout=3000)
+            page.wait_for_timeout(500)
+            
+            search_input = page.locator(".select2-search__field").last
+            search_input.fill("")
+            # Type just the first few characters (e.g. "Week 26") to broaden the search
+            short_week = week_text.split("(")[0].strip() if "(" in week_text else week_text
+            search_input.type(short_week, delay=50)
+            page.wait_for_timeout(1000)
+            
+            first_result = page.locator(".select2-results__option").first
+            first_result.click(timeout=3000)
+            page.wait_for_timeout(1000)
+            log.info(f"    ✔ Week '{short_week}' selected successfully.")
+            return True
+    except Exception as e:
+        log.warning(f"    ⚠️ Could not auto-select week: {e}")
+        try:
+            page.keyboard.press("Escape")
+        except:
+            pass
+    return False
+
+
 def _select2_dropdown(page: Page, label_text: str, search_text: str, field_name: str = "Field") -> bool:
     """
     Selects an option in a Select2 custom dropdown widget.
@@ -492,6 +524,17 @@ def _fill_timesheet(page: Page, tasks: list[dict], week: str, category: str) -> 
         page.locator("text='Timesheet'").first.click()
 
     page.wait_for_timeout(2000)
+
+    # ── Select Week before adding entries ────────────────────────────────────
+    if not _select_week(page, week):
+        print(f"[BOT_QUESTION] field=Week Selection | wanted={week} | options=I have manually selected the week on the portal", flush=True)
+        sys.stdout.flush()
+        log.info("    ⏸️  Waiting for you to manually select the week...")
+        try:
+            input().strip()
+        except EOFError:
+            pass
+        page.wait_for_timeout(1000)
 
     for idx, task in enumerate(tasks, start=1):
         log.info(f"📝 --- Processing row {idx}/{len(tasks)} ---")
