@@ -53,6 +53,10 @@ if st.session_state.get("show_saved_toast"):
     st.toast("Credentials saved successfully!", icon="✅")
     st.session_state.show_saved_toast = False
 
+if st.session_state.get("show_reset_toast"):
+    st.toast("Credentials reset successfully!", icon="🗑️")
+    st.session_state.show_reset_toast = False
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def session_file_exists() -> bool:
@@ -389,8 +393,18 @@ with st.sidebar:
     else:
         st.markdown('<p class="dot-err">● Credentials not set</p>', unsafe_allow_html=True)
 
-    if st.button("✏️  Edit Credentials", use_container_width=True):
-        credentials_dialog()
+    col_edit, col_reset = st.columns([1, 1])
+    with col_edit:
+        if st.button("✏️ Edit", use_container_width=True):
+            credentials_dialog()
+    with col_reset:
+        if st.button("🗑️ Reset", use_container_width=True):
+            save_creds_to_env("", "", "", "", "")
+            for k in ["portal_username", "portal_password", "jira_server", "jira_email", "jira_api_token"]:
+                st.session_state[k] = ""
+            st.session_state.creds_configured = False
+            st.session_state.show_reset_toast = True
+            st.rerun()
 
     st.markdown("---")
 
@@ -489,9 +503,9 @@ st.markdown("")
 # ══════════════════════════════════════════════════════════════════════════════
 # MODE SELECTION TABS
 # ══════════════════════════════════════════════════════════════════════════════
-tab_jira, tab_upload = st.tabs([
-    "🔷  Mode 1 — Fetch from Jira / CR URL",
-    "📄  Mode 2 — Upload Task Sheet",
+tab_upload, tab_jira = st.tabs([
+    "📄  Mode 1 — Upload Task Sheet",
+    "🔷  Mode 2 — Fetch from Jira / CR URL",
 ])
 
 
