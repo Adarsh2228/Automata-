@@ -192,6 +192,8 @@ def _launch_context(playwright, use_session: bool) -> tuple:
 
     # Automatically run headless on Render (servers have no display for headed browsers)
     is_server = os.getenv("RENDER") is not None
+    if is_server:
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
     
     try:
         browser = playwright.chromium.launch(
@@ -631,7 +633,8 @@ def run_bot(
         log.error("❌ PORTAL_URL is not set in your .env file – aborting.")
         sys.exit(1)
 
-    log.info("🤖 Starting Playwright bot (headless=False)")
+    is_server = os.getenv("RENDER") is not None
+    log.info(f"🤖 Starting Playwright bot (headless={is_server})")
     start_time = time.perf_counter()
 
     with sync_playwright() as pw:
