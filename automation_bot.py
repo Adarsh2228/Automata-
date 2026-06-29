@@ -338,17 +338,14 @@ def _select_week(page: Page, week_text: str) -> bool:
             page.wait_for_timeout(500)
             log.info("    ✔ Calendar displayed on portal.")
             
-        # Immediately pause and let the user select the week
-        print(f"[BOT_QUESTION] field=Select Week | wanted={week_text} (Manual Selection Required) | options=I have clicked my week on the portal", flush=True)
-        sys.stdout.flush()
-        log.info(f"    ⏸️  Waiting for you to select the week on the calendar…")
-        try:
-            input().strip()
-        except EOFError:
-            pass
-            
-        # Give the portal a moment to reload the timesheet grid after they click
-        page.wait_for_timeout(2000)
+        # Pause using a simple timeout to avoid Streamlit UI reset bugs
+        log.info(f"    ⏸️  ACTION REQUIRED: Please click your week on the portal calendar NOW.")
+        log.info(f"    ⏳ Waiting 15 seconds for you to select it...")
+        
+        # We wait 15 seconds to give the user plenty of time to click their week.
+        page.wait_for_timeout(15_000)
+        
+        log.info("    ▶️  Resuming automation...")
         return True
 
     except Exception as e:
