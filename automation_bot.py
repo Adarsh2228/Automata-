@@ -267,21 +267,27 @@ def _do_login(page: Page) -> None:
     log.info("⌨️  Filling in credentials…")
 
     # ── SANGRAHA PORTAL SELECTORS (confirmed from live HTML) ──────────────
-    # Username field: <input id="UserId" name="UserId" ...>
+    # Username field
     page.locator("#UserId").wait_for(state="visible", timeout=15_000)
-    page.locator("#UserId").fill(PORTAL_USERNAME)
+    page.locator("#UserId").fill("")
+    page.locator("#UserId").type(PORTAL_USERNAME, delay=50)
 
-    # Password field: <input id="passwordInput" name="Password" ...>
-    page.locator("#passwordInput").fill(PORTAL_PASSWORD)
+    # Password field
+    page.locator("#passwordInput").fill("")
+    page.locator("#passwordInput").type(PORTAL_PASSWORD, delay=50)
 
-    # Submit button: <input type="submit" value="Login" class="btn btn-login">
-    page.locator("input[type='submit'][value='Login']").click(no_wait_after=True)
+    # Press Enter to submit (often more robust than clicking a button)
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(1000)
 
-    # After login Sangraha redirects away from the root / page.
-    page.wait_for_function(
-        "() => !window.location.pathname.endsWith('/') || document.querySelector('#UserId') === null",
-        timeout=20_000,
-    )
+    # Wait for the Timesheet page to load or the login form to disappear
+    try:
+        page.wait_for_url("**/Employee/Timesheet**", timeout=15_000)
+    except Exception:
+        # If we didn't reach the timesheet, check if we're still stuck on login
+        if page.locator("#UserId").is_visible():
+            log.error("❌ Login failed. The portal did not redirect. Please check if your credentials are correct.")
+            sys.exit(1)
     log.info("✅ Login successful! Current URL: %s", page.url)
 
 
