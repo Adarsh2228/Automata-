@@ -316,82 +316,111 @@ def _is_session_valid(page: Page) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _select_week(page: Page, week_text: str) -> bool:
-    """Opens the calendar and pauses for the user to manually select the week."""
-    log.info(f"📅 Opening calendar for manual week selection...")
+    """Fully-automated week selection. Parses week_text, clicks the calendar, and falls back to JS injection."""
+    import datetime as _dt
+    log.info(f"📅 Selecting week: {week_text}")
     try:
-        # 1. Find the date input field
+        # ── Parse the week string from Streamlit: "21-Jun-2026 to 27-Jun-2026"
+        parts = week_text.split(" to ")
+        if len(parts) != 2:
+            log.warning(f"    ⚠️ Cannot parse week string: {week_text}")
+            return False
+
+        start_str = parts[0].strip()
+        end_str   = parts[1].strip()
+        target_start = _dt.datetime.strptime(start_str, "%d-%b-%Y")
+        target_end   = _dt.datetime.strptime(end_str,   "%d-%b-%Y")
+
+        # Expected format in the portal's date input: "Jun 21 - Jun 27, 2026"
+        expected_val = (
+            f"{target_start.strftime('%b %d')} - {target_end.strftime('%b %d, %Y')}"
+        )
+        log.info(f"    Target portal value: '{expected_val}'")
+
+        # ── 1. Find the date input field (contains "Jun 28" style text) ──────
         date_input = None
         for inp in page.locator("input[type='text'], input:not([type])").all():
-            val = inp.input_value()
-            if val and re.search(r"[A-Z][a-z]{2} \d{1,2}", val):
-                date_input = inp
-                break
-                
-        if not date_input:
+            try:
+                val = inp.input_value()
+                if val and re.search(r"[A-Z][a-z]{2} \d{1,2}", val):
+                    date_input = inp
+                    break
+            except Exception:
+                continue
+
+        if date_input is None:
+            # Fallback: find input near the "Add New Entry" button
             add_btn = page.locator("text='Add New Entry'").first
             if add_btn.count() > 0:
                 date_input = add_btn.locator("xpath=..").locator("input").first
 
-        if date_input and date_input.count() > 0:
-            if date_input.input_value() == expected_val:
-                log.info(f"    ✔ Week is already correctly set to {expected_val}.")
-                return True
-                
-            # Click to display the whole calendar
-            date_input.click(timeout=3000)
-            page.wait_for_timeout(1000)
-            log.info("    ✔ Calendar displayed on portal.")
-            
-            target_day = str(target_start.day)
-            
-            # Find cells with the exact day text using Playwright's exact text pseudo-selector
-            day_cells = page.locator("td, .day").get_by_text(target_day, exact=True).all()
-            
-            clicked = False
-            for cell in day_cells:
+        if date_input is None or date_input.count() == 0:
+            log.warning("    ⚠️ Could not find the date input on the page.")
+            return False
+
+        # ── 2. If already correct week, do nothing ────────────────────────────
+        current_val = date_input.input_value()
+        if current_val == expected_val:
+            log.info(f"    ✔ Week already set correctly.")
+            return True
+
+        # ── 3. Click to open the calendar popup ───────────────────────────────
+        date_input.click(timeout=5000)
+        page.wait_for_timeout(1200)
+        log.info("    ✔ Calendar opened.")
+
+        # ── 4. Click the target day cell ──────────────────────────────────────
+        target_day = str(target_start.day)
+        day_cells  = page.locator("td, .day").get_by_text(target_day, exact=True).all()
+
+        clicked = False
+        for cell in day_cells:
+            try:
                 if not cell.is_visible():
                     continue
-                    
                 class_attr = (cell.get_attribute("class") or "").lower()
-                # Skip days from previous/next months which are usually grayed out
                 if any(x in class_attr for x in ["old", "new", "muted", "disabled", "other-month", "out-of-range"]):
                     continue
-                    
-                # A calendar cell is usually small. A full timesheet row/cell might be large.
                 box = cell.bounding_box()
                 if box and box["width"] > 100:
-                    continue # Too wide to be a calendar day cell
-                    
+                    continue  # timesheet grid cell, not calendar
                 cell.scroll_into_view_if_needed()
                 cell.click(timeout=3000)
                 clicked = True
-                page.wait_for_timeout(2000) # Wait for AJAX load of the new week
+                page.wait_for_timeout(2000)
+                log.info(f"    ✔ Clicked calendar day {target_day}.")
                 break
-                
-            if clicked:
-                if date_input.input_value() == expected_val:
-                    log.info(f"    ✔ Successfully selected week: {expected_val}")
-                    return True
-                else:
-                    log.warning(f"    ⚠️ Clicked calendar but input didn't change to {expected_val}")
-            
-            # Fallback: Javascript injection if clicking fails or misses
-            log.info(f"    Force-filling date input via Javascript...")
-            date_input.evaluate(f"el => {{ el.removeAttribute('readonly'); el.value = '{expected_val}'; el.dispatchEvent(new Event('input', {{ bubbles: true }})); el.dispatchEvent(new Event('change', {{ bubbles: true }})); }}")
-            page.wait_for_timeout(1500)
-            
-            if date_input.input_value() == expected_val:
-                log.info("    ✔ Week forcefully set via value injection.")
-                return True
-                
-            log.warning("    ❌ Failed to select the correct week automatically.")
-            return False
+            except Exception:
+                continue
+
+        if clicked and date_input.input_value() == expected_val:
+            log.info(f"    ✔ Successfully selected week: {expected_val}")
+            return True
+
+        # ── 5. JS-injection fallback ─────────────────────────────────────────
+        log.info("    🔧 Trying JS injection fallback...")
+        date_input.evaluate(
+            f"el => {{"
+            f"  el.removeAttribute('readonly');"
+            f"  el.value = '{expected_val}';"
+            f"  el.dispatchEvent(new Event('input',  {{bubbles:true}}));"
+            f"  el.dispatchEvent(new Event('change', {{bubbles:true}}));"
+            f"}}"
+        )
+        page.wait_for_timeout(2000)
+
+        if date_input.input_value() == expected_val:
+            log.info("    ✔ Week set via JS injection.")
+            return True
+
+        log.warning("    ❌ Both click and JS injection failed to set the correct week.")
+        return False
 
     except Exception as e:
-        log.warning(f"    ⚠️ Error opening calendar: {e}")
+        log.warning(f"    ⚠️ _select_week error: {e}")
         try:
             page.keyboard.press("Escape")
-        except:
+        except Exception:
             pass
         return False
 
