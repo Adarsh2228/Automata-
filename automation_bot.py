@@ -205,10 +205,10 @@ def _launch_context(playwright, use_session: bool) -> tuple:
             timeout=30_000,
         )
     except Exception as e:
-        if "Executable doesn't exist" in str(e) and is_server:
-            log.warning("⚠️ Playwright browser missing (Render cache issue). Installing now...")
+        if "Executable doesn't exist" in str(e):
+            log.warning("⚠️ Playwright browser missing. Installing now...")
             import subprocess
-            subprocess.run(["playwright", "install", "chromium"], check=True)
+            subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
             log.info("✅ Installation complete. Retrying launch...")
             browser = playwright.chromium.launch(
                 headless=is_server,
